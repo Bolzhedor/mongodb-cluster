@@ -1,0 +1,109 @@
+version: "3.9"
+
+services:
+
+  mongo1:
+    image: mongo:8.0
+    container_name: mongo1
+    hostname: mongo1
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    env_file:
+      - .env
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    command: >
+      mongod
+      --replSet ${REPLICA_SET_NAME}
+      --bind_ip_all
+      --keyFile /etc/mongo-keyfile
+      --oplogSize ${OPLOG_SIZE_MB}
+      --wiredTigerCacheSizeGB ${WT_CACHE_SIZE_GB}
+    volumes:
+      - mongo1-data:/data/db
+      - mongo1-config:/data/configdb
+      - ./mongo-keyfile:/etc/mongo-keyfile:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    ulimits:
+      nofile: 64000
+
+  mongo2:
+    image: mongo:8.0
+    container_name: mongo2
+    hostname: mongo2
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    env_file:
+      - .env
+    command: >
+      mongod
+      --replSet ${REPLICA_SET_NAME}
+      --bind_ip_all
+      --keyFile /etc/mongo-keyfile
+      --oplogSize ${OPLOG_SIZE_MB}
+      --wiredTigerCacheSizeGB ${WT_CACHE_SIZE_GB}
+    volumes:
+      - mongo2-data:/data/db
+      - mongo2-config:/data/configdb
+      - ./mongo-keyfile:/etc/mongo-keyfile:ro
+    depends_on:
+      mongo1:
+        condition: service_healthy
+    ulimits:
+      nofile: 64000
+
+  mongo3:
+    image: mongo:8.0
+    container_name: mongo3
+    hostname: mongo3
+    restart: unless-stopped
+    ports:
+      - "27019:27017"
+    env_file:
+      - .env
+    command: >
+      mongod
+      --replSet ${REPLICA_SET_NAME}
+      --bind_ip_all
+      --keyFile /etc/mongo-keyfile
+      --oplogSize ${OPLOG_SIZE_MB}
+      --wiredTigerCacheSizeGB ${WT_CACHE_SIZE_GB}
+    volumes:
+      - mongo3-data:/data/db
+      - mongo3-config:/data/configdb
+      - ./mongo-keyfile:/etc/mongo-keyfile:ro
+    depends_on:
+      mongo1:
+        condition: service_healthy
+    ulimits:
+      nofile: 64000
+
+  mongo-init:
+    image: mongo:8.0
+    container_name: mongo-init
+    restart: "no"
+    depends_on:
+      mongo1:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./init/init-replica-set.sh:/scripts/init-replica-set.sh:ro
+    entrypoint: ["/bin/bash"]
+    command: ["/scripts/init-replica-set.sh"]
+
+volumes:
+  mongo1-data:
+  mongo1-config:
+  mongo2-data:
+  mongo2-config:
+  mongo3-data:
+  mongo3-config:
